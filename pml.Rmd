@@ -1,0 +1,107 @@
+---
+title: "Practical Machine Learning Project - Weight Lifting Activity Recogition"
+author: "Ankit Gupta"
+date: "Monday, June 15, 2015"
+output: html_document
+---
+
+##Executive Summary
+Using machine learning algorithm, the project aims to predict the manner in which users performed the exercises using "classe" variable in the training data set. The model to categorise the activity will be built using Random Forest algorithm, leveraging the following benefits -
+
+- Accuracy
+- Runs efficiently on large data bases
+- Handles thousands of input variables without variable deletion
+- Gives estimates of what variables are important in the classification
+- Generates an internal unbiased estimate of the generalization error as the forest building progresses
+- Provides effective methods for estimating missing data
+- Maintains accuracy when a large proportion of the data are missing
+- Provides methods for balancing error in class population unbalanced data sets
+- Generated forests can be saved for future use on other data
+- Offers an experimental method for detecting variable interactions
+(Source: Data Science Central Blog)
+
+##Initialising Environment
+
+```{r}
+#Set the working directory
+setwd("C:/Coursera/Data Science/Practical Machine Learning/assignment/")
+
+#Import the required libraries
+library(caret)
+library(randomForest)
+```
+
+##Data Processing
+The model building will start by creating training and test datasets from the available CSV files.
+```{r}
+train <- read.csv("pml-training.csv", header = T)
+test <- read.csv("pml-testing.csv", header = T)
+str(train)
+str(test)
+```
+
+###Handling Missing Data Columns
+The first step after creating train dataset is to handle missing values and NA's in the training and test datasets. Initial investigation shows presence of missing values and NA's in various columns of train dataset. Let's create a logical vector "miss" to capture if a particular column in test data set contains missing of NA value. It is important to note here that data cleansing is being done by identifying columns in "test" dataset since the prediction model will be applied and tested on the test dataset. The problematic columns identified in test data set will also be matched in train dataset to reduce the number of predictors, thereby yielding in better accuracy.
+Also since the problem statement is concerned with activities pertaining to "belt", "arm", "forearm", "dumbbell", only the columns with names containing these keywords will be considered as predictors.
+```{r}
+#Create a logical vector to identify missing and NA values in test dataset.
+miss <- sapply(test, function(x) any(is.na(x) | x == ""))
+#Consider column names with "belt", "arm", "dumbbell" keywords
+isVar <- !miss & grepl("belt|arm|dumbbell", names(miss))
+predictors <- names(miss)[isVar]
+```
+
+###Subset training Dataset
+With the help of predictors vector, a subset of training dataset is created. As evident, the number of predictors has been reduced from substantially from 160 to 53 including "classe" variable which is to be predicted.
+
+```{r}
+train <- train[, c("classe", predictors)]
+str(train)
+```
+
+###Data Split for Cross Validation
+Before applying the model on test dataset, the effect of model will be measure and verfied by splitting training dataset in two parts "sub.train" and "cross.val" data frame. sub.train will be used to build the model and cross.val will be used to measure the accruracy and error rate of the model.
+```{r}
+inTrain <- createDataPartition(train$classe, p = .6, list = F)
+
+sub.train <- train[inTrain,]
+cross.val <- train[-inTrain, ]
+
+preProc <- preProcess(sub.train[, -1])
+preProc
+
+nzv <- nearZeroVar(sub.train, saveMetrics = T)
+nzv
+```
+Principal Component Analysis and Near Zero Variance does not yield constructive results and the model can be build without their need.
+
+##Building the model
+The model will be built using Random Forest algorithm. The number of trees have been set to 1000 for better accuracy rate and prediction at an expense of processing time to construct the model.
+```{r, cache=TRUE}
+
+modelFit <- randomForest(classe ~ ., data = sub.train, ntree = 1000, importance = TRUE, keep.forest = TRUE)
+
+```
+
+```{r}
+modelFit
+
+
+confusionMatrix(predict(modelFit, newdata =  cross.val), cross.val$classe)
+```
+Further investigation shows the model predicion at a staggering rate of 99.38% which is expected considering the high number of decision trees implied during the construct.
+
+###Variable Importance
+```{r}
+varImpPlot(modelFit)
+```
+Plotting the variable importance plot shows "yaw_belt" and "roll_bet" to be the most significant variables/features in the model construct.
+
+##Final Result
+With such high accuracy and low error rate, the model can be applied to test dataset to predict the activity type of the 20 cases.
+```{r}
+test <- test[, c("problem_id", predictors)]
+
+predict(modelFit, test)
+
+```
